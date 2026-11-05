@@ -1,0 +1,45 @@
+name: Test failOnStdErr false with additionalArguments
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/fake-az/az" "$RUNNER_TEMP/fakebin/az"
+          chmod +x "$RUNNER_TEMP/fakebin/az"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+          rm -f /tmp/fake-az-calls.log
+      - id: action
+        uses: .
+        env:
+          FAKE_AZ_STDERR: "1"
+        with:
+          scope: resourcegroup
+          resourceGroupName: my-rg
+          template: tests/fixtures/template.json
+          deploymentMode: Complete
+          failOnStdErr: false
+          additionalArguments: --what-if
+      - name: Assert outputs
+        env:
+          STORAGE: ${{ steps.action.outputs.storageName }}
+        run: |
+          echo "storageName: $STORAGE"
+          if [ "$STORAGE" != "teststorage123" ]; then
+            echo "FAIL: expected 'teststorage123'"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert additionalArguments only on create, mode lowercased
+        run: |
+          cat /tmp/fake-az-calls.log
+          grep -q '^deployment group create --resource-group my-rg --template-file tests/fixtures/template.json --mode complete --what-if -o json' /tmp/fake-az-calls.log || { echo "FAIL: create call missing additional args"; exit 1; }
+          if grep '^deployment group validate' /tmp/fake-az-calls.log | grep -q -- '--what-if'; then
+            echo "FAIL: additionalArguments should not be passed to validate"
+            exit 1
+          fi
+          echo "PASS"

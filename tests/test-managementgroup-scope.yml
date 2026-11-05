@@ -1,0 +1,43 @@
+name: Test management group scope deployment
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/fake-az/az" "$RUNNER_TEMP/fakebin/az"
+          chmod +x "$RUNNER_TEMP/fakebin/az"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+          rm -f /tmp/fake-az-calls.log
+      - id: action
+        uses: .
+        with:
+          scope: managementgroup
+          managementGroupId: my-test-mg
+          region: westeurope
+          deploymentName: mg-deploy-test
+          template: tests/fixtures/template.json
+      - name: Assert outputs
+        env:
+          STORAGE: ${{ steps.action.outputs.storageName }}
+        run: |
+          echo "storageName: $STORAGE"
+          if [ "$STORAGE" != "teststorage123" ]; then
+            echo "FAIL: expected 'teststorage123'"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert az invocations
+        run: |
+          cat /tmp/fake-az-calls.log
+          grep -q '^deployment mg validate .*--management-group-id my-test-mg' /tmp/fake-az-calls.log || { echo "FAIL: mg validate missing management group id"; exit 1; }
+          grep -q '^deployment mg create --location westeurope --template-file tests/fixtures/template.json --management-group-id my-test-mg --name mg-deploy-test' /tmp/fake-az-calls.log || { echo "FAIL: mg create call wrong"; exit 1; }
+          if grep -q '^group show' /tmp/fake-az-calls.log; then
+            echo "FAIL: group show should not run for management group scope"
+            exit 1
+          fi
+          echo "PASS"

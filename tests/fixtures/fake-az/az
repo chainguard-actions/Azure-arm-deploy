@@ -1,0 +1,38 @@
+#!/bin/bash
+# Fake Azure CLI for act tests. Logs every invocation and returns canned results.
+LOG="${FAKE_AZ_LOG:-/tmp/fake-az-calls.log}"
+echo "$*" >> "$LOG"
+
+case "$*" in
+  "account set"*)
+    exit 0
+    ;;
+  "group show"*)
+    case "$*" in
+      *missing-rg*)
+        echo "ERROR: (ResourceGroupNotFound) Resource group 'missing-rg' could not be found." >&2
+        exit 3
+        ;;
+    esac
+    echo '{"name":"rg","location":"eastus"}'
+    exit 0
+    ;;
+  "deployment "*" validate"*)
+    if [ "${FAKE_AZ_VALIDATE_FAIL:-}" = "1" ]; then
+      echo "ERROR: InvalidTemplate" >&2
+      exit 1
+    fi
+    echo '{"properties":{"provisioningState":"Succeeded"}}'
+    exit 0
+    ;;
+  "deployment "*" create"*)
+    if [ "${FAKE_AZ_STDERR:-}" = "1" ]; then
+      echo "WARNING: something was written to stderr" >&2
+    fi
+    echo '{"properties":{"provisioningState":"Succeeded","outputs":{"storageName":{"type":"String","value":"teststorage123"},"endpoint":{"type":"String","value":"https://example.test/"}}}}'
+    exit 0
+    ;;
+esac
+
+echo "fake az: unexpected call: $*" >&2
+exit 2

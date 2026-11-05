@@ -1,0 +1,50 @@
+name: Test resource group deployment (basic)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/fake-az/az" "$RUNNER_TEMP/fakebin/az"
+          chmod +x "$RUNNER_TEMP/fakebin/az"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+          rm -f /tmp/fake-az-calls.log
+      - id: action
+        uses: .
+        with:
+          scope: resourcegroup
+          resourceGroupName: my-rg
+          template: tests/fixtures/template.json
+          deploymentName: my-deployment
+          parameters: storageName=teststorage123
+      - name: Assert outputs parsed from deployment JSON
+        env:
+          STORAGE: ${{ steps.action.outputs.storageName }}
+          ENDPOINT: ${{ steps.action.outputs.endpoint }}
+        run: |
+          echo "storageName: $STORAGE"
+          echo "endpoint: $ENDPOINT"
+          if [ "$STORAGE" != "teststorage123" ]; then
+            echo "FAIL: expected storageName 'teststorage123'"
+            exit 1
+          fi
+          if [ "$ENDPOINT" != "https://example.test/" ]; then
+            echo "FAIL: expected endpoint 'https://example.test/'"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert az invocations
+        run: |
+          cat /tmp/fake-az-calls.log
+          grep -q '^group show --resource-group my-rg' /tmp/fake-az-calls.log || { echo "FAIL: group show not called"; exit 1; }
+          grep -q '^deployment group validate --resource-group my-rg --template-file tests/fixtures/template.json --mode Incremental --name my-deployment --parameters storageName=teststorage123 -o json' /tmp/fake-az-calls.log || { echo "FAIL: validate call wrong"; exit 1; }
+          grep -q '^deployment group create --resource-group my-rg --template-file tests/fixtures/template.json --mode Incremental --name my-deployment --parameters storageName=teststorage123 -o json' /tmp/fake-az-calls.log || { echo "FAIL: create call wrong"; exit 1; }
+          if grep -q '^account set' /tmp/fake-az-calls.log; then
+            echo "FAIL: account set should not be called without subscriptionId"
+            exit 1
+          fi
+          echo "PASS"

@@ -1,0 +1,42 @@
+name: Test subscription scope deployment
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/fake-az/az" "$RUNNER_TEMP/fakebin/az"
+          chmod +x "$RUNNER_TEMP/fakebin/az"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+          rm -f /tmp/fake-az-calls.log
+      - id: action
+        uses: .
+        with:
+          scope: subscription
+          region: eastus
+          subscriptionId: 00000000-0000-0000-0000-000000000000
+          template: tests/fixtures/template.json
+      - name: Assert outputs
+        env:
+          STORAGE: ${{ steps.action.outputs.storageName }}
+        run: |
+          echo "storageName: $STORAGE"
+          if [ "$STORAGE" != "teststorage123" ]; then
+            echo "FAIL: expected 'teststorage123'"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert az invocations
+        run: |
+          cat /tmp/fake-az-calls.log
+          grep -q '^account set --subscription 00000000-0000-0000-0000-000000000000' /tmp/fake-az-calls.log || { echo "FAIL: account set not called"; exit 1; }
+          grep -q '^deployment sub create --location eastus --template-file tests/fixtures/template.json' /tmp/fake-az-calls.log || { echo "FAIL: sub create call wrong"; exit 1; }
+          if grep -q '^group show' /tmp/fake-az-calls.log; then
+            echo "FAIL: group show should not run for subscription scope"
+            exit 1
+          fi
+          echo "PASS"

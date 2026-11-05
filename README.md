@@ -8,6 +8,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 
 | Version | Tag | Upstream commit | Hardening report |
 |---------|-----|-----------------|------------------|
+| v1.0.9 | [`v1.0.9`](https://github.com/chainguard-actions/Azure-arm-deploy/tree/v1.0.9) | [`65ae74f`](https://github.com/Azure/arm-deploy/commit/65ae74fb7aec7c680c88ef456811f353adae4d06) | [`HARDENING.md`](https://github.com/chainguard-actions/Azure-arm-deploy/blob/v1.0.9/HARDENING.md) |
 | v2 | [`v2`](https://github.com/chainguard-actions/Azure-arm-deploy/tree/v2) | [`a1361c2`](https://github.com/Azure/arm-deploy/commit/a1361c2c2cd398621955b16ca32e01c65ea340f5) | [`HARDENING.md`](https://github.com/chainguard-actions/Azure-arm-deploy/blob/v2/HARDENING.md) |
 
 ## Privacy

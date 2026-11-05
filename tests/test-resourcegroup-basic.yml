@@ -1,0 +1,41 @@
+name: Test resource group deployment (basic)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p /tmp/fakeaz
+          cp tests/fixtures/fake-az/az /tmp/fakeaz/az
+          chmod +x /tmp/fakeaz/az
+          : > /tmp/fakeaz/calls.log
+          echo "/tmp/fakeaz" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          scope: resourcegroup
+          resourceGroupName: my-rg
+          template: tests/fixtures/template.json
+          parameters: storageAccountName=mystorage123
+          deploymentName: my-deploy
+      - name: Assert outputs
+        env:
+          SA: ${{ steps.action.outputs.storageAccountName }}
+          LOC: ${{ steps.action.outputs.location }}
+        run: |
+          echo "storageAccountName: $SA"
+          echo "location: $LOC"
+          if [ "$SA" != "mystorage123" ]; then echo "FAIL: storageAccountName"; exit 1; fi
+          if [ "$LOC" != "eastus" ]; then echo "FAIL: location"; exit 1; fi
+          echo "PASS"
+      - name: Assert az calls
+        run: |
+          cat /tmp/fakeaz/calls.log
+          grep -q '^group show --resource-group my-rg' /tmp/fakeaz/calls.log || { echo "FAIL: no group show"; exit 1; }
+          grep -q '^deployment group validate --resource-group my-rg --template-file tests/fixtures/template.json --mode Incremental --name my-deploy --parameters storageAccountName=mystorage123 -o json' /tmp/fakeaz/calls.log || { echo "FAIL: validate args"; exit 1; }
+          grep -q '^deployment group create --resource-group my-rg --template-file tests/fixtures/template.json --mode Incremental --name my-deploy --parameters storageAccountName=mystorage123 -o json' /tmp/fakeaz/calls.log || { echo "FAIL: create args"; exit 1; }
+          if grep -q '^account set' /tmp/fakeaz/calls.log; then echo "FAIL: account set should not be called without subscriptionId"; exit 1; fi
+          echo "PASS"

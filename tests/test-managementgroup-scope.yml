@@ -1,0 +1,33 @@
+name: Test management group scope deployment
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p /tmp/fakeaz
+          cp tests/fixtures/fake-az/az /tmp/fakeaz/az
+          chmod +x /tmp/fakeaz/az
+          : > /tmp/fakeaz/calls.log
+          echo "/tmp/fakeaz" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          scope: managementgroup
+          managementGroupId: my-mg
+          subscriptionId: 00000000-1111-2222-3333-444444444444
+          region: westeurope
+          template: https://example.com/template.json
+      - name: Assert outputs and az calls
+        env:
+          LOC: ${{ steps.action.outputs.location }}
+        run: |
+          echo "location: $LOC"
+          cat /tmp/fakeaz/calls.log
+          if [ "$LOC" != "eastus" ]; then echo "FAIL: location output"; exit 1; fi
+          grep -q '^deployment mg create --location westeurope --template-uri https://example.com/template.json --management-group-id my-mg -o json' /tmp/fakeaz/calls.log || { echo "FAIL: create args"; exit 1; }
+          if grep -q '^account set' /tmp/fakeaz/calls.log; then echo "FAIL: account set must be skipped for managementgroup scope"; exit 1; fi
+          echo "PASS"

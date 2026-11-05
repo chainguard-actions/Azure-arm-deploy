@@ -1,0 +1,62 @@
+#!/bin/sh
+# Fake Azure CLI used by the tests. Logs every invocation (one line per call)
+# to calls.log next to this script, and returns canned responses.
+# Behaviour switches (env vars inherited from the action step):
+#   FAKE_AZ_RG_MISSING=true     -> "group show" exits non-zero
+#   FAKE_AZ_VALIDATE_FAIL=true  -> "deployment * validate" exits non-zero
+#   FAKE_AZ_CREATE_FAIL=true    -> "deployment * create" exits non-zero
+#   FAKE_AZ_CREATE_STDERR=true  -> "deployment * create" writes a warning to stderr
+DIR="$(cd "$(dirname "$0")" && pwd)"
+echo "$*" >> "$DIR/calls.log"
+
+case "$1 $2" in
+  "account set")
+    exit 0
+    ;;
+  "group show")
+    if [ "${FAKE_AZ_RG_MISSING:-}" = "true" ]; then
+      echo "ERROR: (ResourceGroupNotFound) Resource group could not be found." >&2
+      exit 3
+    fi
+    echo '{"name":"fake-rg","location":"eastus"}'
+    exit 0
+    ;;
+esac
+
+if [ "$1" = "deployment" ]; then
+  case "$3" in
+    validate)
+      if [ "${FAKE_AZ_VALIDATE_FAIL:-}" = "true" ]; then
+        echo "ERROR: InvalidTemplate - fake validation failure" >&2
+        exit 1
+      fi
+      echo '{"properties":{"provisioningState":"Succeeded"}}'
+      exit 0
+      ;;
+    create)
+      if [ "${FAKE_AZ_CREATE_FAIL:-}" = "true" ]; then
+        echo "ERROR: DeploymentFailed - fake failure" >&2
+        exit 1
+      fi
+      if [ "${FAKE_AZ_CREATE_STDERR:-}" = "true" ]; then
+        echo "WARNING: something was written to stderr" >&2
+      fi
+      cat <<'EOF'
+{
+  "name": "fake-deployment",
+  "properties": {
+    "provisioningState": "Succeeded",
+    "outputs": {
+      "storageAccountName": { "type": "String", "value": "mystorage123" },
+      "location": { "type": "String", "value": "eastus" }
+    }
+  }
+}
+EOF
+      exit 0
+      ;;
+  esac
+fi
+
+echo "fake az: unsupported command: $*" >&2
+exit 2

@@ -1,0 +1,32 @@
+name: Test Validate deployment mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p /tmp/fakeaz
+          cp tests/fixtures/fake-az/az /tmp/fakeaz/az
+          chmod +x /tmp/fakeaz/az
+          : > /tmp/fakeaz/calls.log
+          echo "/tmp/fakeaz" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          scope: resourcegroup
+          resourceGroupName: my-rg
+          template: tests/fixtures/template.json
+          deploymentMode: Validate
+      - name: Assert only validation ran
+        env:
+          SA: ${{ steps.action.outputs.storageAccountName }}
+        run: |
+          cat /tmp/fakeaz/calls.log
+          grep -q '^deployment group validate .*--mode Incremental' /tmp/fakeaz/calls.log || { echo "FAIL: validate not called"; exit 1; }
+          if grep -q '^deployment group create' /tmp/fakeaz/calls.log; then echo "FAIL: create should not run in Validate mode"; exit 1; fi
+          echo "storageAccountName: '$SA'"
+          if [ -n "$SA" ]; then echo "FAIL: no outputs expected in Validate mode"; exit 1; fi
+          echo "PASS"

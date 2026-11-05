@@ -1,0 +1,30 @@
+name: Test tenant scope deployment
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p /tmp/fakeaz
+          cp tests/fixtures/fake-az/az /tmp/fakeaz/az
+          chmod +x /tmp/fakeaz/az
+          : > /tmp/fakeaz/calls.log
+          echo "/tmp/fakeaz" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        with:
+          scope: tenant
+          region: eastus
+          template: tests/fixtures/template.json
+      - name: Assert outputs and az calls
+        env:
+          SA: ${{ steps.action.outputs.storageAccountName }}
+        run: |
+          echo "storageAccountName: $SA"
+          cat /tmp/fakeaz/calls.log
+          if [ "$SA" != "mystorage123" ]; then echo "FAIL: storageAccountName"; exit 1; fi
+          grep -q '^deployment tenant create .*--template-file tests/fixtures/template.json' /tmp/fakeaz/calls.log || { echo "FAIL: tenant create not called"; exit 1; }
+          echo "PASS"

@@ -1,0 +1,36 @@
+name: Test failOnStdErr false and additionalArguments
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fake az CLI
+        run: |
+          mkdir -p /tmp/fakeaz
+          cp tests/fixtures/fake-az/az /tmp/fakeaz/az
+          chmod +x /tmp/fakeaz/az
+          : > /tmp/fakeaz/calls.log
+          echo "/tmp/fakeaz" >> "$GITHUB_PATH"
+      - id: action
+        uses: .
+        env:
+          FAKE_AZ_CREATE_STDERR: "true"
+        with:
+          scope: resourcegroup
+          resourceGroupName: my-rg
+          template: tests/fixtures/template.json
+          deploymentMode: Complete
+          failOnStdErr: false
+          additionalArguments: --what-if-exclude-change-types Ignore
+      - name: Assert success and argument handling
+        env:
+          SA: ${{ steps.action.outputs.storageAccountName }}
+        run: |
+          echo "storageAccountName: $SA"
+          cat /tmp/fakeaz/calls.log
+          if [ "$SA" != "mystorage123" ]; then echo "FAIL: storageAccountName"; exit 1; fi
+          grep -q '^deployment group create .*--mode complete.* --what-if-exclude-change-types Ignore -o json' /tmp/fakeaz/calls.log || { echo "FAIL: create args missing mode/additional args"; exit 1; }
+          if grep '^deployment group validate' /tmp/fakeaz/calls.log | grep -q 'what-if-exclude'; then echo "FAIL: additionalArguments must not be passed to validate"; exit 1; fi
+          echo "PASS"
